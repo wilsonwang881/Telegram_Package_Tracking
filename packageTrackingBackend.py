@@ -2,6 +2,7 @@ import logging
 import requests
 import xml.etree.ElementTree as ET
 import os
+from datetime import datetime
 
 from telegram import Update, ForceReply
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 USPSTrackingNumbers = {}
+deliveredUSPSTrackingNumbers = {}
 USPS_TOKEN = os.getenv('USPS_TOKEN')
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
@@ -36,10 +38,36 @@ def help_command(update: Update, context: CallbackContext) -> None:
 
 def echo(update: Update, context: CallbackContext) -> None:
     """Echo the user message."""
-    update.message.reply_text(update.message.text)
+    res = "\"" + update.message.text + "\" is not a valid command. Try /help."
+    update.message.reply_text(res)
 
 
-def queryUSPS(update: Update, context: CallbackContext):
+def removeDeliveredUSPSTracking(context: CallbackContext) -> None:
+    """Send the alarm message."""
+    job = context.job
+    global deliveredUSPSTrackingNumbers
+    timenow = datetime.now()
+    recordsToRemove = []
+    for key in deliveredUSPSTrackingNumbers:
+        if ((timenow - deliveredUSPSTrackingNumbers[key]).total_seconds()) > (23 * 3600):
+            USPSTrackingNumbers.pop(key)
+            recordsToRemove.append(key)
+    
+    for el in recordsToRemove:
+        deliveredUSPSTrackingNumbers.pop(el)
+
+
+def remove_job_if_exists(name: str, context: CallbackContext) -> bool:
+    """Remove job with given name. Returns whether job was removed."""
+    current_jobs = context.job_queue.get_jobs_by_name(name)
+    if not current_jobs:
+        return False
+    for job in current_jobs:
+        job.schedule_removal()
+    return True
+
+
+def queryUSPS(update: Update, context: CallbackContext) -> None:
     """Query USPS API to get the tracking details"""
     if len(context.args) > 0:
         USPSTrackingNumbers[context.args[0]] = ''
@@ -68,8 +96,13 @@ def queryUSPS(update: Update, context: CallbackContext):
 
         for child in parsedXMLRoot.iter('TrackSummary'):
             reassembledRes = reassembledRes + child.text + '\n\n'
-            if "was delivered" in child.text:
+            if "try again later" in child.text:
                 recordsToPop.append(key)
+            if "was delivered" in child.text:
+                deliveredUSPSTrackingNumbers[key] = datetime.now()
+                chat_id = update.message.chat_id
+                job_removed = remove_job_if_exists(str(chat_id), context)
+                context.job_queue.run_once(removeDeliveredUSPSTracking, 24 * 3600, context=chat_id, name=str(chat_id))
 
         reassembledRes = reassembledRes + "*Track Details* \n\n"
 
@@ -81,6 +114,11 @@ def queryUSPS(update: Update, context: CallbackContext):
 
     for record in recordsToPop:
         USPSTrackingNumbers.pop(record)
+
+
+def clearRecords(update: Update, context: CallbackContext) -> None:
+    USPSTrackingNumbers = {}
+    update.message.reply_text("Cleared tracking records!")
 
 
 def main() -> None:
@@ -95,6 +133,7 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("USPS", queryUSPS))
+    dispatcher.add_handler(CommandHandler("clear", clearRecords))
 
     # on non command i.e message - echo the message on Telegram
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
