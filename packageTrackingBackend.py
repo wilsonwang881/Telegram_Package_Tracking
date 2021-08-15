@@ -117,6 +117,7 @@ def queryUSPS(update: Update, context: CallbackContext) -> None:
 
 
 def clearRecords(update: Update, context: CallbackContext) -> None:
+    global USPSTrackingNumbers
     USPSTrackingNumbers = {}
     update.message.reply_text("Cleared tracking records!")
 
