@@ -88,11 +88,11 @@ def queryUSPS(update: Update, context: CallbackContext) -> None:
 
         parsedXMLRoot = ET.fromstring(res)
 
-        reassembledRes = "*Track ID* \n\n"
+        reassembledRes = "<b>Track ID</b> \n\n"
 
         reassembledRes = reassembledRes + key + '\n\n'
 
-        reassembledRes = reassembledRes + "*Track Summary* \n\n"
+        reassembledRes = reassembledRes + "<b>Track Summary</b> \n\n"
 
         for child in parsedXMLRoot.iter('TrackSummary'):
             reassembledRes = reassembledRes + child.text + '\n\n'
@@ -104,13 +104,13 @@ def queryUSPS(update: Update, context: CallbackContext) -> None:
                 job_removed = remove_job_if_exists(str(chat_id), context)
                 context.job_queue.run_once(removeDeliveredUSPSTracking, 24 * 3600, context=chat_id, name=str(chat_id))
 
-        reassembledRes = reassembledRes + "*Track Details* \n\n"
+        reassembledRes = reassembledRes + "<b>Track Details</b>\n\n"
 
         for child in parsedXMLRoot.iter('TrackDetail'):
             reassembledRes = reassembledRes + child.text + '\n\n'
 
-        reassembledRes = reassembledRes.replace("_", "\\_").replace("[", "\\[").replace("`", "\\`").replace(".", "\\.").replace("#", "\\#").replace("=", "\\=").replace('-', '\\-')
-        update.message.reply_text(reassembledRes, parse_mode='MarkdownV2') #
+        # reassembledRes = reassembledRes.replace("_", "\\_").replace("[", "\\[").replace("`", "\\`").replace(".", "\\.").replace("#", "\\#").replace("=", "\\=").replace('-', '\\-').replace('>', '\\>')
+        update.message.reply_text(reassembledRes, parse_mode='HTML') #
 
     for record in recordsToPop:
         USPSTrackingNumbers.pop(record)
